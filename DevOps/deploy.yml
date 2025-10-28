@@ -1,0 +1,157 @@
+# Single deploy pipeline with four stages: Dev -> QA -> Staging -> Prod
+# Configure the variable values below (service connection and web app names).
+
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  - name: azureSubscription
+    value: '<<AzureServiceConnectionName>>' # replace with your Azure service connection name
+  - name: buildConfiguration
+    value: 'Release'
+  - name: webAppNameDev
+    value: '<<webapp-dev-name>>'
+  - name: webAppNameQa
+    value: '<<webapp-qa-name>>'
+  - name: webAppNameStaging
+    value: '<<webapp-staging-name>>'
+  - name: webAppNameProd
+    value: '<<webapp-prod-name>>'
+
+pool:
+  vmImage: 'windows-latest'
+
+stages:
+- stage: Dev
+  displayName: 'Deploy to Dev'
+  jobs:
+  - deployment: DeployToDev
+    displayName: 'Deploy to Dev'
+    environment: 'dev'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+
+          - task: UseDotNet@2
+            inputs:
+              packageType: 'sdk'
+              version: '8.0.x'
+              includePreview: false
+
+          - script: |
+              dotnet publish .\PaymentProcessor.Api\PaymentProcessor.Api.csproj -c $(buildConfiguration) -o $(Pipeline.Workspace)\artifacts
+            displayName: 'dotnet publish (API)'
+
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              appType: 'webApp'
+              appName: '$(webAppNameDev)'
+              package: '$(Pipeline.Workspace)\artifacts'
+            displayName: 'Deploy to Azure Web App (Dev)'
+
+- stage: QA
+  displayName: 'Deploy to QA'
+  dependsOn: Dev
+  condition: succeeded()
+  jobs:
+  - deployment: DeployToQa
+    displayName: 'Deploy to QA'
+    environment: 'qa'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+
+          - task: UseDotNet@2
+            inputs:
+              packageType: 'sdk'
+              version: '8.0.x'
+              includePreview: false
+
+          - script: |
+              dotnet publish .\PaymentProcessor.Api\PaymentProcessor.Api.csproj -c $(buildConfiguration) -o $(Pipeline.Workspace)\artifacts
+            displayName: 'dotnet publish (API)'
+
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              appType: 'webApp'
+              appName: '$(webAppNameQa)'
+              package: '$(Pipeline.Workspace)\artifacts'
+            displayName: 'Deploy to Azure Web App (QA)'
+
+- stage: Staging
+  displayName: 'Deploy to Staging'
+  dependsOn: QA
+  condition: succeeded()
+  jobs:
+  - deployment: DeployToStaging
+    displayName: 'Deploy to Staging'
+    environment: 'staging'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+
+          - task: UseDotNet@2
+            inputs:
+              packageType: 'sdk'
+              version: '8.0.x'
+              includePreview: false
+
+          - script: |
+              dotnet publish .\PaymentProcessor.Api\PaymentProcessor.Api.csproj -c $(buildConfiguration) -o $(Pipeline.Workspace)\artifacts
+            displayName: 'dotnet publish (API)'
+
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              appType: 'webApp'
+              appName: '$(webAppNameStaging)'
+              package: '$(Pipeline.Workspace)\artifacts'
+            displayName: 'Deploy to Azure Web App (Staging)'
+
+- stage: Prod
+  displayName: 'Deploy to Prod'
+  dependsOn: Staging
+  condition: succeeded()
+  jobs:
+  - deployment: DeployToProd
+    displayName: 'Deploy to Prod'
+    # Use the 'prod' environment so you can attach approvals/checks in Azure DevOps Environments
+    environment: 'prod'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+
+          - task: UseDotNet@2
+            inputs:
+              packageType: 'sdk'
+              version: '8.0.x'
+              includePreview: false
+
+          - script: |
+              dotnet publish .\PaymentProcessor.Api\PaymentProcessor.Api.csproj -c $(buildConfiguration) -o $(Pipeline.Workspace)\artifacts
+            displayName: 'dotnet publish (API)'
+
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              appType: 'webApp'
+              appName: '$(webAppNameProd)'
+              package: '$(Pipeline.Workspace)\artifacts'
+            displayName: 'Deploy to Azure Web App (Prod)'
+
+# Notes:
+# - Replace <<AzureServiceConnectionName>> and web app name placeholders with real values or define them as pipeline variables/variable groups.
+# - Configure environment-level approvals/checks in Azure DevOps (Project Settings -> Environments) to require manual approvals before staging/prod.
+# - Alternatively, convert these deployments to consume artifacts from a CI build pipeline by adding an artifact resource and removing the publish steps.

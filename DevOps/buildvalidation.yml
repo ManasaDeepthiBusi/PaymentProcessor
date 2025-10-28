@@ -1,0 +1,41 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  solution: 'PaymentProcessor.sln'
+  buildConfiguration: 'Release'
+
+pool:
+  vmImage: 'windows-latest'
+
+steps:
+  - checkout: self
+
+  - task: UseDotNet@2
+    inputs:
+      packageType: 'sdk'
+      version: '8.0.x'
+      includePreview: false
+
+  - script: dotnet restore $(solution)
+    displayName: 'dotnet restore'
+
+  - script: dotnet build $(solution) --configuration $(buildConfiguration) --no-restore
+    displayName: 'dotnet build'
+
+  - script: dotnet test **/*Tests.csproj --configuration $(buildConfiguration) --no-build --logger "trx"
+    displayName: 'dotnet test'
+
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: 'VSTest'
+      testResultsFiles: '**/*.trx'
+      failTaskOnFailedTests: true
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      ArtifactName: 'drop'
+      publishLocation: 'Container'
