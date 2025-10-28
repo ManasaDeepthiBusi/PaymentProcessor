@@ -1,0 +1,8 @@
+{
+  "appName": "paymentprocessor-dev",
+  "location": "eastus",
+  "sku": "S1",
+  "instanceCount": 1,
+  "connectionStringName": "PaymentDb_Dev",
+  "enableDiagnostics": true
+}

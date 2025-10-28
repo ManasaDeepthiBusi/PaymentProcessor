@@ -1,0 +1,8 @@
+{
+  "appName": "paymentprocessor-qa",
+  "location": "eastus2",
+  "sku": "S1",
+  "instanceCount": 1,
+  "connectionStringName": "PaymentDb_QA",
+  "enableDiagnostics": true
+}

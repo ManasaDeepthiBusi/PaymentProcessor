@@ -1,0 +1,8 @@
+{
+  "appName": "paymentprocessor-beta",
+  "location": "westus",
+  "sku": "S1",
+  "instanceCount": 2,
+  "connectionStringName": "PaymentDb_Beta",
+  "enableDiagnostics": true
+}
