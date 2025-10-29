@@ -25,7 +25,7 @@ steps:
   - script: dotnet build $(solution) --configuration $(buildConfiguration) --no-restore
     displayName: 'dotnet build'
 
-  - script: dotnet test **/*Tests.csproj --configuration $(buildConfiguration) --no-build --logger "trx"
+  - script: dotnet test $(solution) --configuration $(buildConfiguration) --no-build --logger "trx"
     displayName: 'dotnet test'
 
   - task: PublishTestResults@2
@@ -34,8 +34,11 @@ steps:
       testResultsFiles: '**/*.trx'
       failTaskOnFailedTests: true
 
+  - script: dotnet publish PaymentProcessor.Api\PaymentProcessor.Api.csproj --configuration $(buildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory)\publish
+    displayName: 'dotnet publish API'
+
   - task: PublishBuildArtifacts@1
     inputs:
-      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)\publish'
       ArtifactName: 'drop'
       publishLocation: 'Container'
