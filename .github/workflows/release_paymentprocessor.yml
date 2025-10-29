@@ -1,0 +1,123 @@
+name: eCommerceApplication/Release_PaymentProcessor
+on:
+  push:
+    branches:
+    - main
+env:
+  azureSubscription: "<<AzureServiceConnectionName>>"
+  buildConfiguration: Release
+  webAppNameDev: "<<webapp-dev-name>>"
+  webAppNameProd: "<<webapp-prod-name>>"
+  webAppNameQa: "<<webapp-qa-name>>"
+  webAppNameStaging: "<<webapp-staging-name>>"
+jobs:
+  Dev-DeployToDev:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+    if: github.RUN_NUMBER == 1
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: download artifact
+      uses: actions/download-artifact@v4.1.0
+    - uses: actions/checkout@v4.1.0
+    - uses: actions/setup-dotnet@v4.0.0
+      with:
+        dotnet-version: 8.0.x
+    - name: dotnet publish (API)
+      run: dotnet publish .\PaymentProcessor.Api\PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
+    - name: Deploy to Azure Web App (Dev)
+      uses: azure/login@v1.6.0
+      with:
+        creds: "${{ secrets.AZURE_CREDENTIALS }}"
+    - name: Deploy to Azure Web App (Dev)
+      uses: azure/webapps-deploy@v3.0.0
+      with:
+        app-name: "${{ env.webAppNameDev }}"
+        package: "${{ runner.workspace }}\\artifacts"
+  QA-DeployToQa:
+    name: Deploy to QA
+    needs:
+    - Dev-DeployToDev
+    runs-on: ubuntu-latest
+    environment:
+      name: qa
+    if: success() && github.RUN_NUMBER == 1
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: download artifact
+      uses: actions/download-artifact@v4.1.0
+    - uses: actions/checkout@v4.1.0
+    - uses: actions/setup-dotnet@v4.0.0
+      with:
+        dotnet-version: 8.0.x
+    - name: dotnet publish (API)
+      run: dotnet publish .\PaymentProcessor.Api\PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
+    - name: Deploy to Azure Web App (QA)
+      uses: azure/login@v1.6.0
+      with:
+        creds: "${{ secrets.AZURE_CREDENTIALS }}"
+    - name: Deploy to Azure Web App (QA)
+      uses: azure/webapps-deploy@v3.0.0
+      with:
+        app-name: "${{ env.webAppNameQa }}"
+        package: "${{ runner.workspace }}\\artifacts"
+  Staging-DeployToStaging:
+    name: Deploy to Staging
+    needs:
+    - QA-DeployToQa
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    if: success() && github.RUN_NUMBER == 1
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: download artifact
+      uses: actions/download-artifact@v4.1.0
+    - uses: actions/checkout@v4.1.0
+    - uses: actions/setup-dotnet@v4.0.0
+      with:
+        dotnet-version: 8.0.x
+    - name: dotnet publish (API)
+      run: dotnet publish .\PaymentProcessor.Api\PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
+    - name: Deploy to Azure Web App (Staging)
+      uses: azure/login@v1.6.0
+      with:
+        creds: "${{ secrets.AZURE_CREDENTIALS }}"
+    - name: Deploy to Azure Web App (Staging)
+      uses: azure/webapps-deploy@v3.0.0
+      with:
+        app-name: "${{ env.webAppNameStaging }}"
+        package: "${{ runner.workspace }}\\artifacts"
+  Prod-DeployToProd:
+    name: Deploy to Prod
+    needs:
+    - Staging-DeployToStaging
+    runs-on: ubuntu-latest
+    environment:
+      name: prod
+    if: success() && github.RUN_NUMBER == 1
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: download artifact
+      uses: actions/download-artifact@v4.1.0
+    - uses: actions/checkout@v4.1.0
+    - uses: actions/setup-dotnet@v4.0.0
+      with:
+        dotnet-version: 8.0.x
+    - name: dotnet publish (API)
+      run: dotnet publish .\PaymentProcessor.Api\PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
+    - name: Deploy to Azure Web App (Prod)
+      uses: azure/login@v1.6.0
+      with:
+        creds: "${{ secrets.AZURE_CREDENTIALS }}"
+    - name: Deploy to Azure Web App (Prod)
+      uses: azure/webapps-deploy@v3.0.0
+      with:
+        app-name: "${{ env.webAppNameProd }}"
+        package: "${{ runner.workspace }}\\artifacts"
