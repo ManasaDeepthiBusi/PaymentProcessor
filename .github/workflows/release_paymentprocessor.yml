@@ -33,8 +33,7 @@ jobs:
     - name: dotnet publish (API)
       run: dotnet publish PaymentProcessor.Api/PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
       
-    - name: Deploy to Dev
-        
+      
        
   QA-DeployToQa:
     name: Deploy to QA
@@ -59,9 +58,7 @@ jobs:
     - name: dotnet publish (API)
       run: dotnet publish PaymentProcessor.Api/PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
       
-    - name: Deploy to QA
-
-        
+       
        
   Staging-DeployToStaging:
     name: Deploy to Staging
@@ -86,7 +83,6 @@ jobs:
     - name: dotnet publish (API)
       run: dotnet publish PaymentProcessor.Api/PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
       
-    - name: Deploy to Staging
         
   Prod-DeployToProd:
     name: Deploy to Prod
@@ -111,5 +107,3 @@ jobs:
     - name: dotnet publish (API)
       run: dotnet publish PaymentProcessor.Api/PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
       
-    - name: Deploy to Prod
-
