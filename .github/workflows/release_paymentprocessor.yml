@@ -28,7 +28,7 @@ jobs:
       with:
         dotnet-version: 8.0.x
     - name: dotnet publish (API)
-      run: dotnet publish PaymentProcessor.Api\PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
+      run: dotnet publish PaymentProcessor.Api/PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
     - name: Deploy to Azure Web App (Dev)
       uses: azure/login@v1.6.0
       with:
