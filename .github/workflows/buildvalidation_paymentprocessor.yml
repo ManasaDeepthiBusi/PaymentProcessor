@@ -1,0 +1,31 @@
+name: eCommerceApplication/BuildValidation_PaymentProcessor
+on:
+  push:
+    branches:
+    - main
+env:
+  buildConfiguration: Release
+  solution: PaymentProcessor.sln
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - uses: actions/checkout@v4.1.0
+    - uses: actions/setup-dotnet@v4.0.0
+      with:
+        dotnet-version: 8.0.x
+    - name: dotnet restore
+      run: dotnet restore ${{ env.solution }}
+    - name: dotnet build
+      run: dotnet build ${{ env.solution }} --configuration ${{ env.buildConfiguration }} --no-restore
+    - name: dotnet test
+      run: dotnet test ${{ env.solution }} --configuration ${{ env.buildConfiguration }} --no-build --logger "trx"
+#     # (VSTest) is an unsupported test runner.
+    - name: dotnet publish API
+      run: dotnet publish PaymentProcessor.Api\PaymentProcessor.Api.csproj --configuration ${{ env.buildConfiguration }} --no-build --output ${{ runner.temp }}\publish
+    - uses: actions/upload-artifact@v4.1.0
+      with:
+        name: drop
+        path: "${{ runner.temp }}\\publish"
