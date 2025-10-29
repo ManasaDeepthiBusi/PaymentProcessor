@@ -21,23 +21,29 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v4.1.0
+      
     - name: download artifact
       uses: actions/download-artifact@v4.1.0
+      
     - uses: actions/checkout@v4.1.0
     - uses: actions/setup-dotnet@v4.0.0
       with:
         dotnet-version: 8.0.x
+        
     - name: dotnet publish (API)
       run: dotnet publish PaymentProcessor.Api/PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
+      
     - name: Deploy to Azure Web App (Dev)
       uses: azure/login@v1.6.0
       with:
         creds: "${{ secrets.AZURE_CREDENTIALS }}"
+        
     - name: Deploy to Azure Web App (Dev)
       uses: azure/webapps-deploy@v3.0.0
       with:
         app-name: "${{ env.webAppNameDev }}"
         package: "${{ runner.workspace }}\\artifacts"
+        
   QA-DeployToQa:
     name: Deploy to QA
     needs:
@@ -49,23 +55,29 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v4.1.0
+      
     - name: download artifact
       uses: actions/download-artifact@v4.1.0
+      
     - uses: actions/checkout@v4.1.0
     - uses: actions/setup-dotnet@v4.0.0
       with:
         dotnet-version: 8.0.x
+        
     - name: dotnet publish (API)
-      run: dotnet publish .\PaymentProcessor.Api\PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
+      run: dotnet publish PaymentProcessor.Api/PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
+      
     - name: Deploy to Azure Web App (QA)
       uses: azure/login@v1.6.0
       with:
         creds: "${{ secrets.AZURE_CREDENTIALS }}"
+        
     - name: Deploy to Azure Web App (QA)
       uses: azure/webapps-deploy@v3.0.0
       with:
         app-name: "${{ env.webAppNameQa }}"
         package: "${{ runner.workspace }}\\artifacts"
+        
   Staging-DeployToStaging:
     name: Deploy to Staging
     needs:
@@ -77,23 +89,29 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v4.1.0
+      
     - name: download artifact
       uses: actions/download-artifact@v4.1.0
+      
     - uses: actions/checkout@v4.1.0
     - uses: actions/setup-dotnet@v4.0.0
       with:
         dotnet-version: 8.0.x
+        
     - name: dotnet publish (API)
-      run: dotnet publish .\PaymentProcessor.Api\PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
+      run: dotnet publish PaymentProcessor.Api/PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
+      
     - name: Deploy to Azure Web App (Staging)
       uses: azure/login@v1.6.0
       with:
         creds: "${{ secrets.AZURE_CREDENTIALS }}"
+        
     - name: Deploy to Azure Web App (Staging)
       uses: azure/webapps-deploy@v3.0.0
       with:
         app-name: "${{ env.webAppNameStaging }}"
         package: "${{ runner.workspace }}\\artifacts"
+        
   Prod-DeployToProd:
     name: Deploy to Prod
     needs:
@@ -105,18 +123,23 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v4.1.0
+      
     - name: download artifact
       uses: actions/download-artifact@v4.1.0
+      
     - uses: actions/checkout@v4.1.0
     - uses: actions/setup-dotnet@v4.0.0
       with:
         dotnet-version: 8.0.x
+        
     - name: dotnet publish (API)
-      run: dotnet publish .\PaymentProcessor.Api\PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
+      run: dotnet publish PaymentProcessor.Api/PaymentProcessor.Api.csproj -c ${{ env.buildConfiguration }} -o ${{ runner.workspace }}\artifacts
+      
     - name: Deploy to Azure Web App (Prod)
       uses: azure/login@v1.6.0
       with:
         creds: "${{ secrets.AZURE_CREDENTIALS }}"
+        
     - name: Deploy to Azure Web App (Prod)
       uses: azure/webapps-deploy@v3.0.0
       with:
