@@ -57,19 +57,17 @@ stages:
           # Install prerequisites (Docker + AWS CLI)
           - script: |
               sudo apt-get update
-              sudo apt-get install -y docker.io jq unzip
-              sudo usermod -aG docker $(whoami)
+              sudo apt-get install -y jq unzip
               # Install AWS CLI v2
               curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
               unzip awscliv2.zip
               sudo ./aws/install
             displayName: 'Install Docker and AWS CLI'
 
-          # Ensure Docker is available in current session
+          # Verify AWS CLI installation
           - script: |
-              docker --version
               aws --version
-            displayName: 'Verify Docker and AWS CLI'
+            displayName: 'Verify AWS CLI'
 
           # Authenticate to AWS via environment variables (set these as pipeline secrets)
           - script: |
