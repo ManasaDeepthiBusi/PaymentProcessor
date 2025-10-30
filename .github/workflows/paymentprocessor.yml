@@ -1,0 +1,428 @@
+name: eCommerceApplication/PaymentProcessor
+on:
+  push:
+    branches:
+    - main
+env:
+  AWS_ACCESS_KEY_ID: AKIAUNDMKM5BFM2FXUY4
+  appRunnerAccessRoleName: AppRunnerECRAccessRole
+  appRunnerServiceNameDev: paymentprocessor-dev
+  appRunnerServiceNameProd: paymentprocessor-prod
+  appRunnerServiceNameQa: paymentprocessor-qa
+  appRunnerServiceNameStaging: paymentprocessor-staging
+  awsRegion: us-east-1
+  buildConfiguration: Release
+  containerPort: '8080'
+  ecrRepoName: paymentprocessor-api
+  imageTag: "${{ github.run_id }}"
+jobs:
+  Dev-DeployToDev:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+    if: github.RUN_NUMBER == 1
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: download artifact
+      uses: actions/download-artifact@v4.1.0
+    - uses: actions/checkout@v4.1.0
+    - name: Install Docker and AWS CLI
+      run: |-
+        sudo apt-get update
+        sudo apt-get install -y jq unzip
+        # Install/Update AWS CLI v2
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip -q awscliv2.zip
+        sudo ./aws/install --update
+    - name: Verify AWS CLI
+      run: aws --version
+    - name: Get AWS account ID
+      env:
+        AWS_ACCESS_KEY_ID: "${{ env.AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+        AWS_DEFAULT_REGION: "${{ env.awsRegion }}"
+      run: |-
+        echo "Using AWS region: ${{ env.awsRegion }}"
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        echo "AWS Account: ${ACCOUNT_ID}"
+        echo "##vso[task.setvariable variable=AccountId]${ACCOUNT_ID}"
+    - name: Ensure ECR repository exists
+      env:
+        AWS_ACCESS_KEY_ID: "${{ env.AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+        AWS_DEFAULT_REGION: "${{ env.awsRegion }}"
+      run: |-
+        set -e
+        aws ecr describe-repositories --repository-name ${{ env.ecrRepoName }} >/dev/null 2>&1 || \
+          aws ecr create-repository --repository-name ${{ env.ecrRepoName }}
+    - name: Docker login to ECR
+      env:
+        AWS_ACCESS_KEY_ID: "${{ env.AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+        AWS_DEFAULT_REGION: "${{ env.awsRegion }}"
+      run: |-
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        ECR_URI=${ACCOUNT_ID}.dkr.ecr.${{ env.awsRegion }}.amazonaws.com
+        aws ecr get-login-password --region ${{ env.awsRegion }} | docker login --username AWS --password-stdin ${ECR_URI}
+        echo "##vso[task.setvariable variable=EcrUri]${ECR_URI}"
+    - name: Build and push API image
+      run: |-
+        IMAGE=${{ env.EcrUri }}/${{ env.ecrRepoName }}:${{ env.imageTag }}
+        echo "Building image ${IMAGE}"
+        docker build -f PaymentProcessor.Api/Dockerfile -t ${IMAGE} .
+        docker push ${IMAGE}
+        echo "##vso[task.setvariable variable=ImageUri]${IMAGE}"
+    - name: Ensure App Runner IAM role exists
+      env:
+        AWS_ACCESS_KEY_ID: "${{ env.AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+        AWS_DEFAULT_REGION: "${{ env.awsRegion }}"
+      run: |-
+        set -e
+        ROLE_NAME="${{ env.appRunnerAccessRoleName }}"
+        echo "Checking if IAM role ${ROLE_NAME} exists..."
+        if ! aws iam get-role --role-name ${ROLE_NAME} >/dev/null 2>&1; then
+          echo "Creating IAM role ${ROLE_NAME}..."
+          cat > trust-policy.json <<EOF
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "build.apprunner.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+        EOF
+          aws iam create-role --role-name ${ROLE_NAME} --assume-role-policy-document file://trust-policy.json
+          aws iam attach-role-policy --role-name ${ROLE_NAME} --policy-arn arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+          echo "IAM role ${ROLE_NAME} created."
+        else
+          echo "IAM role ${ROLE_NAME} already exists."
+        fi
+        ROLE_ARN=$(aws iam get-role --role-name ${ROLE_NAME} --query 'Role.Arn' --output text)
+        echo "##vso[task.setvariable variable=AppRunnerRoleArn]${ROLE_ARN}"
+    - name: Create or update App Runner service (Dev)
+      env:
+        AWS_ACCESS_KEY_ID: "${{ env.AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+        AWS_DEFAULT_REGION: "${{ env.awsRegion }}"
+      run: |-
+        set -e
+        SERVICE_NAME="${{ env.appRunnerServiceNameDev }}"
+        PARAMS_FILE="Deployment/Transforms/Dev/parameters.json"
+        echo "Loading parameters from ${PARAMS_FILE}"
+        ENV_ARR=$(jq -c 'to_entries | map({name: .key, value: ( .value|tostring)})' "${PARAMS_FILE}")
+        ENV_ARR=$(jq -c --arg port "${{ env.containerPort }}" '. + [{"name":"ASPNETCORE_URLS","value":"http://+:" + $port}]' <<< "$ENV_ARR")
+        # Check if service exists
+        if aws apprunner list-services --region ${{ env.awsRegion }} --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn" --output text | grep -q .; then
+          echo "App Runner service ${SERVICE_NAME} exists. Updating..."
+          SERVICE_ARN=$(aws apprunner list-services --region ${{ env.awsRegion }} --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn" --output text)
+          cat > source-config.json <<EOF
+        {
+          "ImageRepository": {
+            "ImageIdentifier": "${{ env.ImageUri }}",
+            "ImageRepositoryType": "ECR",
+            "ImageConfiguration": {
+              "Port": "${{ env.containerPort }}",
+              "RuntimeEnvironmentVariables": $ENV_ARR
+            }
+          },
+          "AuthenticationConfiguration": {
+            "AccessRoleArn": "${{ env.AppRunnerRoleArn }}"
+          }
+        }
+        EOF
+          aws apprunner update-service --service-arn ${SERVICE_ARN} --source-configuration file://source-config.json
+          echo "Service ${SERVICE_NAME} updated."
+        else
+          echo "App Runner service ${SERVICE_NAME} does not exist. Creating..."
+          cat > create-service.json <<EOF
+        {
+          "ServiceName": "${SERVICE_NAME}",
+          "SourceConfiguration": {
+            "ImageRepository": {
+              "ImageIdentifier": "${{ env.ImageUri }}",
+              "ImageRepositoryType": "ECR",
+              "ImageConfiguration": {
+                "Port": "${{ env.containerPort }}",
+                "RuntimeEnvironmentVariables": $ENV_ARR
+              }
+            },
+            "AuthenticationConfiguration": {
+              "AccessRoleArn": "${{ env.AppRunnerRoleArn }}"
+            },
+            "AutoDeploymentsEnabled": false
+          },
+          "InstanceConfiguration": {
+            "Cpu": "1024",
+            "Memory": "2048"
+          }
+        }
+        EOF
+          aws apprunner create-service --cli-input-json file://create-service.json --region ${{ env.awsRegion }}
+          echo "Service ${SERVICE_NAME} created. Waiting for it to become available..."
+          aws apprunner wait service-running --service-name ${SERVICE_NAME} --region ${{ env.awsRegion }} || true
+        fi
+  QA-DeployToQa:
+    name: Deploy to QA
+    needs:
+    - Dev-DeployToDev
+    runs-on: ubuntu-latest
+    environment:
+      name: qa
+    if: success() && github.RUN_NUMBER == 1
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: download artifact
+      uses: actions/download-artifact@v4.1.0
+    - uses: actions/checkout@v4.1.0
+    - name: Install AWS CLI and jq
+      run: |-
+        sudo apt-get update
+        sudo apt-get install -y jq unzip
+        # Install/Update AWS CLI v2
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip -q awscliv2.zip
+        sudo ./aws/install --update
+    - name: Create or update App Runner service (QA)
+      env:
+        AWS_ACCESS_KEY_ID: "${{ env.AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+        AWS_DEFAULT_REGION: "${{ env.awsRegion }}"
+      run: |-
+        set -e
+        SERVICE_NAME="${{ env.appRunnerServiceNameQa }}"
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        echo "##vso[task.setvariable variable=AccountId]${ACCOUNT_ID}"
+        IMAGE=${ACCOUNT_ID}.dkr.ecr.${{ env.awsRegion }}.amazonaws.com/${{ env.ecrRepoName }}:${{ env.imageTag }}
+        echo "Using image ${IMAGE}"
+        PARAMS_FILE="Deployment/Transforms/QA/parameters.json"
+        ENV_ARR=$(jq -c 'to_entries | map({name: .key, value: ( .value|tostring)})' "${PARAMS_FILE}")
+        ENV_ARR=$(jq -c --arg port "${{ env.containerPort }}" '. + [{"name":"ASPNETCORE_URLS","value":"http://+:" + $port}]' <<< "$ENV_ARR")
+        # Get IAM role ARN
+        ROLE_ARN=$(aws iam get-role --role-name ${{ env.appRunnerAccessRoleName }} --query 'Role.Arn' --output text)
+        # Check if service exists
+        if aws apprunner list-services --region ${{ env.awsRegion }} --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn" --output text | grep -q .; then
+          echo "App Runner service ${SERVICE_NAME} exists. Updating..."
+          SERVICE_ARN=$(aws apprunner list-services --region ${{ env.awsRegion }} --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn" --output text)
+          cat > source-config.json <<EOF
+        {
+          "ImageRepository": {
+            "ImageIdentifier": "${IMAGE}",
+            "ImageRepositoryType": "ECR",
+            "ImageConfiguration": {
+              "Port": "${{ env.containerPort }}",
+              "RuntimeEnvironmentVariables": $ENV_ARR
+            }
+          },
+          "AuthenticationConfiguration": {
+            "AccessRoleArn": "${ROLE_ARN}"
+          }
+        }
+        EOF
+          aws apprunner update-service --service-arn ${SERVICE_ARN} --source-configuration file://source-config.json
+        else
+          echo "App Runner service ${SERVICE_NAME} does not exist. Creating..."
+          cat > create-service.json <<EOF
+        {
+          "ServiceName": "${SERVICE_NAME}",
+          "SourceConfiguration": {
+            "ImageRepository": {
+              "ImageIdentifier": "${IMAGE}",
+              "ImageRepositoryType": "ECR",
+              "ImageConfiguration": {
+                "Port": "${{ env.containerPort }}",
+                "RuntimeEnvironmentVariables": $ENV_ARR
+              }
+            },
+            "AuthenticationConfiguration": {
+              "AccessRoleArn": "${ROLE_ARN}"
+            },
+            "AutoDeploymentsEnabled": false
+          },
+          "InstanceConfiguration": {
+            "Cpu": "1024",
+            "Memory": "2048"
+          }
+        }
+        EOF
+          aws apprunner create-service --cli-input-json file://create-service.json --region ${{ env.awsRegion }}
+          echo "Service ${SERVICE_NAME} created."
+        fi
+  Staging-DeployToStaging:
+    name: Deploy to Staging
+    needs:
+    - QA-DeployToQa
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    if: success() && github.RUN_NUMBER == 1
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: download artifact
+      uses: actions/download-artifact@v4.1.0
+    - uses: actions/checkout@v4.1.0
+    - name: Install AWS CLI and jq
+      run: |-
+        sudo apt-get update
+        sudo apt-get install -y jq unzip
+        # Install/Update AWS CLI v2
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip -q awscliv2.zip
+        sudo ./aws/install --update
+    - name: Create or update App Runner service (Staging/Beta)
+      env:
+        AWS_ACCESS_KEY_ID: "${{ env.AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+        AWS_DEFAULT_REGION: "${{ env.awsRegion }}"
+      run: |-
+        set -e
+        SERVICE_NAME="${{ env.appRunnerServiceNameStaging }}"
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        IMAGE=${ACCOUNT_ID}.dkr.ecr.${{ env.awsRegion }}.amazonaws.com/${{ env.ecrRepoName }}:${{ env.imageTag }}
+        PARAMS_FILE="Deployment/Transforms/BETA/parameters.json"
+        ENV_ARR=$(jq -c 'to_entries | map({name: .key, value: ( .value|tostring)})' "${PARAMS_FILE}")
+        ENV_ARR=$(jq -c --arg port "${{ env.containerPort }}" '. + [{"name":"ASPNETCORE_URLS","value":"http://+:" + $port}]' <<< "$ENV_ARR")
+        # Get IAM role ARN
+        ROLE_ARN=$(aws iam get-role --role-name ${{ env.appRunnerAccessRoleName }} --query 'Role.Arn' --output text)
+        # Check if service exists
+        if aws apprunner list-services --region ${{ env.awsRegion }} --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn" --output text | grep -q .; then
+          echo "App Runner service ${SERVICE_NAME} exists. Updating..."
+          SERVICE_ARN=$(aws apprunner list-services --region ${{ env.awsRegion }} --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn" --output text)
+          cat > source-config.json <<EOF
+        {
+          "ImageRepository": {
+            "ImageIdentifier": "${IMAGE}",
+            "ImageRepositoryType": "ECR",
+            "ImageConfiguration": {
+              "Port": "${{ env.containerPort }}",
+              "RuntimeEnvironmentVariables": $ENV_ARR
+            }
+          },
+          "AuthenticationConfiguration": {
+            "AccessRoleArn": "${ROLE_ARN}"
+          }
+        }
+        EOF
+          aws apprunner update-service --service-arn ${SERVICE_ARN} --source-configuration file://source-config.json
+        else
+          echo "App Runner service ${SERVICE_NAME} does not exist. Creating..."
+          cat > create-service.json <<EOF
+        {
+          "ServiceName": "${SERVICE_NAME}",
+          "SourceConfiguration": {
+            "ImageRepository": {
+              "ImageIdentifier": "${IMAGE}",
+              "ImageRepositoryType": "ECR",
+              "ImageConfiguration": {
+                "Port": "${{ env.containerPort }}",
+                "RuntimeEnvironmentVariables": $ENV_ARR
+              }
+            },
+            "AuthenticationConfiguration": {
+              "AccessRoleArn": "${ROLE_ARN}"
+            },
+            "AutoDeploymentsEnabled": false
+          },
+          "InstanceConfiguration": {
+            "Cpu": "1024",
+            "Memory": "2048"
+          }
+        }
+        EOF
+          aws apprunner create-service --cli-input-json file://create-service.json --region ${{ env.awsRegion }}
+          echo "Service ${SERVICE_NAME} created."
+        fi
+  Prod-DeployToProd:
+    name: Deploy to Prod
+    needs:
+    - Staging-DeployToStaging
+    runs-on: ubuntu-latest
+    environment:
+      name: prod
+    if: success() && github.RUN_NUMBER == 1
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: download artifact
+      uses: actions/download-artifact@v4.1.0
+    - uses: actions/checkout@v4.1.0
+    - name: Install AWS CLI and jq
+      run: |-
+        sudo apt-get update
+        sudo apt-get install -y jq unzip
+        # Install/Update AWS CLI v2
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip -q awscliv2.zip
+        sudo ./aws/install --update
+    - name: Create or update App Runner service (Prod)
+      env:
+        AWS_ACCESS_KEY_ID: "${{ env.AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+        AWS_DEFAULT_REGION: "${{ env.awsRegion }}"
+      run: |-
+        set -e
+        SERVICE_NAME="${{ env.appRunnerServiceNameProd }}"
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        IMAGE=${ACCOUNT_ID}.dkr.ecr.${{ env.awsRegion }}.amazonaws.com/${{ env.ecrRepoName }}:${{ env.imageTag }}
+        PARAMS_FILE="Deployment/Transforms/Prod/parameters.json"
+        ENV_ARR=$(jq -c 'to_entries | map({name: .key, value: ( .value|tostring)})' "${PARAMS_FILE}")
+        ENV_ARR=$(jq -c --arg port "${{ env.containerPort }}" '. + [{"name":"ASPNETCORE_URLS","value":"http://+:" + $port}]' <<< "$ENV_ARR")
+        # Get IAM role ARN
+        ROLE_ARN=$(aws iam get-role --role-name ${{ env.appRunnerAccessRoleName }} --query 'Role.Arn' --output text)
+        # Check if service exists
+        if aws apprunner list-services --region ${{ env.awsRegion }} --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn" --output text | grep -q .; then
+          echo "App Runner service ${SERVICE_NAME} exists. Updating..."
+          SERVICE_ARN=$(aws apprunner list-services --region ${{ env.awsRegion }} --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn" --output text)
+          cat > source-config.json <<EOF
+        {
+          "ImageRepository": {
+            "ImageIdentifier": "${IMAGE}",
+            "ImageRepositoryType": "ECR",
+            "ImageConfiguration": {
+              "Port": "${{ env.containerPort }}",
+              "RuntimeEnvironmentVariables": $ENV_ARR
+            }
+          },
+          "AuthenticationConfiguration": {
+            "AccessRoleArn": "${ROLE_ARN}"
+          }
+        }
+        EOF
+          aws apprunner update-service --service-arn ${SERVICE_ARN} --source-configuration file://source-config.json
+        else
+          echo "App Runner service ${SERVICE_NAME} does not exist. Creating..."
+          cat > create-service.json <<EOF
+        {
+          "ServiceName": "${SERVICE_NAME}",
+          "SourceConfiguration": {
+            "ImageRepository": {
+              "ImageIdentifier": "${IMAGE}",
+              "ImageRepositoryType": "ECR",
+              "ImageConfiguration": {
+                "Port": "${{ env.containerPort }}",
+                "RuntimeEnvironmentVariables": $ENV_ARR
+              }
+            },
+            "AuthenticationConfiguration": {
+              "AccessRoleArn": "${ROLE_ARN}"
+            },
+            "AutoDeploymentsEnabled": false
+          },
+          "InstanceConfiguration": {
+            "Cpu": "1024",
+            "Memory": "2048"
+          }
+        }
+        EOF
+          aws apprunner create-service --cli-input-json file://create-service.json --region ${{ env.awsRegion }}
+          echo "Service ${SERVICE_NAME} created."
+        fi
