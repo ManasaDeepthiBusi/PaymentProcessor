@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: dev
-    if: github.RUN_NUMBER == 1
+    
     steps:
     - name: checkout
       uses: actions/checkout@v4.1.0
@@ -174,7 +174,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: qa
-    if: success() && github.RUN_NUMBER == 1
+    if: success()
     steps:
     - name: checkout
       uses: actions/checkout@v4.1.0
@@ -257,7 +257,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: staging
-    if: success() && github.RUN_NUMBER == 1
+    if: success()
     steps:
     - name: checkout
       uses: actions/checkout@v4.1.0
@@ -338,7 +338,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: prod
-    if: success() && github.RUN_NUMBER == 1
+    if: success()
     steps:
     - name: checkout
       uses: actions/checkout@v4.1.0
