@@ -1,0 +1,31 @@
+name: eCommerceApplication/Classic-CI
+on:
+  workflow_dispatch:
+env:
+  system_debug: 'false'
+jobs:
+  Job_1:
+    name: Agent job
+    runs-on: windows-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: dotnet restore
+      run: dotnet restore ${{ env.solution }} --verbosity "Normal"
+    - name: dotnet build
+      run: dotnet build ${{ env.solution }} --configuration ${{ env.buildConfiguration }} --no-restore
+    - name: dotnet test
+      run: dotnet test ${{ env.solution }} --logger trx --results-directory "${{ runner.temp }}" --configuration ${{ env.buildConfiguration }} --no-build --logger "trx"
+    - name: dotnet test
+      uses: NasAmin/trx-parser@v0.5.0
+      if: always()
+      with:
+        TRX_PATH: "${{ runner.temp }}"
+        REPO_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+    - name: publish
+      run: dotnet publish --configuration ${{ env.buildConfiguration }} --output ${{ runner.temp }}
+    - name: 'Publish Artifact: drop'
+      uses: actions/upload-artifact@v4.1.0
+      with:
+        name: drop
+        path: "${{ runner.temp }}\\publish"
