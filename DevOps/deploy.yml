@@ -58,10 +58,10 @@ stages:
           - script: |
               sudo apt-get update
               sudo apt-get install -y jq unzip
-              # Install AWS CLI v2
+              # Install/Update AWS CLI v2
               curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-              unzip awscliv2.zip
-              sudo ./aws/install
+              unzip -q awscliv2.zip
+              sudo ./aws/install --update
             displayName: 'Install Docker and AWS CLI'
 
           # Verify AWS CLI installation
@@ -229,10 +229,10 @@ stages:
           - script: |
               sudo apt-get update
               sudo apt-get install -y jq unzip
-              # Install AWS CLI v2
+              # Install/Update AWS CLI v2
               curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-              unzip awscliv2.zip
-              sudo ./aws/install
+              unzip -q awscliv2.zip
+              sudo ./aws/install --update
             displayName: 'Install AWS CLI and jq'
 
           - script: |
@@ -319,10 +319,10 @@ stages:
           - script: |
               sudo apt-get update
               sudo apt-get install -y jq unzip
-              # Install AWS CLI v2
+              # Install/Update AWS CLI v2
               curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-              unzip awscliv2.zip
-              sudo ./aws/install
+              unzip -q awscliv2.zip
+              sudo ./aws/install --update
             displayName: 'Install AWS CLI and jq'
 
           - script: |
@@ -407,10 +407,10 @@ stages:
           - script: |
               sudo apt-get update
               sudo apt-get install -y jq unzip
-              # Install AWS CLI v2
+              # Install/Update AWS CLI v2
               curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-              unzip awscliv2.zip
-              sudo ./aws/install
+              unzip -q awscliv2.zip
+              sudo ./aws/install --update
             displayName: 'Install AWS CLI and jq'
 
           - script: |
