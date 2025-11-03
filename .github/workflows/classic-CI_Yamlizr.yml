@@ -14,7 +14,7 @@ jobs:
       run: dotnet restore ${{ env.solution }}
       
     - name: dotnet build
-      run: dotnet ${{ env.solution }} --configuration Release --no-restore
+      run: dotnet build ${{ env.solution }} --configuration Release --no-restore
       
     - name: dotnet test
       run: dotnet test ${{ env.solution }} --configuration Release --no-build --logger trx
