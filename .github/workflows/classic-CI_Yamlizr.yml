@@ -7,21 +7,22 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
+    
     - uses: actions/checkout@v4.1.0
+    
     - name: dotnet restore
-
-      run: dotnet build ${{ env.solution }}
+      run: dotnet restore ${{ env.solution }}
+      
     - name: dotnet build
-
       run: dotnet ${{ env.solution }} --configuration Release --no-restore
+      
     - name: dotnet test
-
       run: dotnet test ${{ env.solution }} --configuration Release --no-build --logger trx
+      
     - name: publish
-
       run: dotnet publish --configuration Release --output ${{ github.workspace }}
+      
     - name: 'Publish Artifact: drop'
-
       uses: actions/upload-artifact@v4.1.0
       with:
         path: ${{ github.workspace }}\publish
