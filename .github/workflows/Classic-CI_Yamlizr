@@ -1,0 +1,27 @@
+name: eCommerceApplication/Classic-CI_Yamlizr
+on:
+  workflow_dispatch:
+env:
+  system.debug: false
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: dotnet restore
+
+      run: dotnet restore ${{ env.solution }}
+    - name: dotnet build
+
+      run: dotnet ${{ env.solution }} --configuration Release --no-restore
+    - name: dotnet test
+
+      run: dotnet test ${{ env.solution }} --configuration Release --no-build --logger trx
+    - name: publish
+
+      run: dotnet publish --configuration Release --output ${{ github.workspace }}
+    - name: 'Publish Artifact: drop'
+
+      uses: actions/upload-artifact@v2
+      with:
+        path: ${{ github.workspace }}\publish
